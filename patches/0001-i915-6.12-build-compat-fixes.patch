@@ -1,0 +1,1224 @@
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/display/i9xx_plane.c drivers/gpu/drm/i915/display/i9xx_plane.c
+--- a/drivers/gpu/drm/i915/display/i9xx_plane.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/display/i9xx_plane.c	2026-03-11 16:54:09.690047230 +0800
+@@ -891,7 +891,9 @@
+ 	.atomic_duplicate_state = intel_plane_duplicate_state,
+ 	.atomic_destroy_state = intel_plane_destroy_state,
+ 	.format_mod_supported = i965_plane_format_mod_supported,
++	#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0)
+ 	.format_mod_supported_async = intel_plane_format_mod_supported_async,
++	#endif
+ };
+ 
+ static const struct drm_plane_funcs i8xx_plane_funcs = {
+@@ -901,7 +903,9 @@
+ 	.atomic_duplicate_state = intel_plane_duplicate_state,
+ 	.atomic_destroy_state = intel_plane_destroy_state,
+ 	.format_mod_supported = i8xx_plane_format_mod_supported,
++	#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0)
+ 	.format_mod_supported_async = intel_plane_format_mod_supported_async,
++	#endif
+ };
+ 
+ static void i9xx_disable_tiling(struct intel_plane *plane)
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/display/icl_dsi.c drivers/gpu/drm/i915/display/icl_dsi.c
+--- a/drivers/gpu/drm/i915/display/icl_dsi.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/display/icl_dsi.c	2026-03-11 17:17:37.278013907 +0800
+@@ -1486,7 +1486,11 @@
+ }
+ 
+ static enum drm_mode_status gen11_dsi_mode_valid(struct drm_connector *connector,
+-						 const struct drm_display_mode *mode)
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
++					 struct drm_display_mode *mode)
++#else
++					 const struct drm_display_mode *mode)
++#endif
+ {
+ 	struct intel_display *display = to_intel_display(connector->dev);
+ 	enum drm_mode_status status;
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/display/intel_crt.c drivers/gpu/drm/i915/display/intel_crt.c
+--- a/drivers/gpu/drm/i915/display/intel_crt.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/display/intel_crt.c	2026-03-11 17:17:53.426013524 +0800
+@@ -351,7 +351,11 @@
+ 
+ static enum drm_mode_status
+ intel_crt_mode_valid(struct drm_connector *connector,
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
++		     struct drm_display_mode *mode)
++#else
+ 		     const struct drm_display_mode *mode)
++#endif
+ {
+ 	struct intel_display *display = to_intel_display(connector->dev);
+ 	int max_dotclk = display->cdclk.max_dotclk_freq;
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/display/intel_dp_aux_backlight.c drivers/gpu/drm/i915/display/intel_dp_aux_backlight.c
+--- a/drivers/gpu/drm/i915/display/intel_dp_aux_backlight.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/display/intel_dp_aux_backlight.c	2026-03-11 17:39:14.549983195 +0800
+@@ -144,14 +144,19 @@
+ 	 * HDR static metadata we need to start maintaining table of
+ 	 * ranges for such panels.
+ 	 */
+-	if (display->params.enable_dpcd_backlight != INTEL_DP_AUX_BACKLIGHT_FORCE_INTEL &&
+-	    !(connector->base.display_info.hdr_sink_metadata.hdmi_type1.metadata_type &
+-	      BIT(HDMI_STATIC_METADATA_TYPE1))) {
+-		drm_info(display->drm,
+-			 "[CONNECTOR:%d:%s] Panel is missing HDR static metadata. Possible support for Intel HDR backlight interface is not used. If your backlight controls don't work try booting with i915.enable_dpcd_backlight=%d.\n",
+-			 connector->base.base.id, connector->base.name,
+-			 INTEL_DP_AUX_BACKLIGHT_FORCE_INTEL);
++	if (display->params.enable_dpcd_backlight != INTEL_DP_AUX_BACKLIGHT_FORCE_INTEL) {
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 17, 0)
++		if (!(connector->base.display_info.hdr_sink_metadata.hdmi_type1.metadata_type &
++		      BIT(HDMI_STATIC_METADATA_TYPE1))) {
++			drm_info(display->drm,
++				 "[CONNECTOR:%d:%s] Panel is missing HDR static metadata. Possible support for Intel HDR backlight interface is not used. If your backlight controls don't work try booting with i915.enable_dpcd_backlight=%d.\n",
++				 connector->base.base.id, connector->base.name,
++				 INTEL_DP_AUX_BACKLIGHT_FORCE_INTEL);
++			return false;
++		}
++#else
+ 		return false;
++#endif
+ 	}
+ 
+ 	panel->backlight.edp.intel_cap.sdr_uses_aux =
+@@ -518,19 +523,33 @@
+ static int intel_dp_aux_vesa_setup_backlight(struct intel_connector *connector, enum pipe pipe)
+ {
+ 	struct intel_display *display = to_intel_display(connector);
+-	struct drm_luminance_range_info *luminance_range =
+-		&connector->base.display_info.luminance_range;
+ 	struct intel_dp *intel_dp = intel_attached_dp(connector);
+ 	struct intel_panel *panel = &connector->panel;
++	struct drm_luminance_range_info *luminance_range __maybe_unused =
++		&connector->base.display_info.luminance_range;
+ 	u32 current_level;
+ 	u8 current_mode;
+ 	int ret;
+ 
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
++	{
++		u16 current_level_u16;
++
++		ret = drm_edp_backlight_init(&intel_dp->aux,
++					     &panel->backlight.edp.vesa.info,
++					     panel->vbt.backlight.pwm_freq_hz,
++					     intel_dp->edp_dpcd,
++					     &current_level_u16,
++					     &current_mode);
++		current_level = current_level_u16;
++	}
++#else
+ 	ret = drm_edp_backlight_init(&intel_dp->aux, &panel->backlight.edp.vesa.info,
+ 				     luminance_range->max_luminance,
+ 				     panel->vbt.backlight.pwm_freq_hz,
+ 				     intel_dp->edp_dpcd, &current_level, &current_mode,
+ 				     panel->backlight.edp.vesa.luminance_control_support);
++#endif
+ 	if (ret < 0)
+ 		return ret;
+ 
+@@ -554,6 +573,8 @@
+ 		}
+ 	}
+ 
++
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)
+ 	if (panel->backlight.edp.vesa.info.luminance_set) {
+ 		if (luminance_range->max_luminance) {
+ 			panel->backlight.max = panel->backlight.edp.vesa.info.max;
+@@ -567,7 +588,9 @@
+ 		drm_dbg_kms(display->drm,
+ 			    "[CONNECTOR:%d:%s] AUX VESA Nits backlight level is controlled through DPCD\n",
+ 			    connector->base.base.id, connector->base.name);
+-	} else if (panel->backlight.edp.vesa.info.aux_set) {
++	} else
++#endif
++	if (panel->backlight.edp.vesa.info.aux_set) {
+ 		panel->backlight.max = panel->backlight.edp.vesa.info.max;
+ 		panel->backlight.min = 0;
+ 		if (current_mode == DP_EDP_BACKLIGHT_CONTROL_MODE_DPCD) {
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/display/intel_dp.c drivers/gpu/drm/i915/display/intel_dp.c
+--- a/drivers/gpu/drm/i915/display/intel_dp.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/display/intel_dp.c	2026-03-11 17:33:29.517991363 +0800
+@@ -1410,7 +1410,11 @@
+ 
+ static enum drm_mode_status
+ intel_dp_mode_valid(struct drm_connector *_connector,
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
++		    struct drm_display_mode *mode)
++#else
+ 		    const struct drm_display_mode *mode)
++#endif
+ {
+ 	struct intel_display *display = to_intel_display(_connector->dev);
+ 	struct intel_connector *connector = to_intel_connector(_connector);
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/display/intel_dp_mst.c drivers/gpu/drm/i915/display/intel_dp_mst.c
+--- a/drivers/gpu/drm/i915/display/intel_dp_mst.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/display/intel_dp_mst.c	2026-03-11 17:47:27.189971532 +0800
+@@ -287,8 +287,15 @@
+ 		if (IS_ERR(mst_state))
+ 			return PTR_ERR(mst_state);
+ 
++		/* drm_dp_get_vc_payload_bw() dropped the mgr parameter in v6.14. */
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 14, 0)
++		mst_state->pbn_div = drm_dp_get_vc_payload_bw(&intel_dp->mst.mgr,
++					      crtc_state->port_clock,
++					      crtc_state->lane_count);
++#else
+ 		mst_state->pbn_div = drm_dp_get_vc_payload_bw(crtc_state->port_clock,
+-							      crtc_state->lane_count);
++					      crtc_state->lane_count);
++#endif
+ 
+ 		mst_stream_update_slots(crtc_state, mst_state);
+ 	}
+@@ -1594,9 +1601,24 @@
+ 				      connector->mst.port);
+ }
+ 
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 15, 0)
++static int
++mst_connector_mode_valid_ctx_legacy(struct drm_connector *connector,
++				    struct drm_display_mode *mode,
++				    struct drm_modeset_acquire_ctx *ctx,
++				    enum drm_mode_status *status)
++{
++	return mst_connector_mode_valid_ctx(connector, mode, ctx, status);
++}
++#endif
++
+ static const struct drm_connector_helper_funcs mst_connector_helper_funcs = {
+ 	.get_modes = mst_connector_get_modes,
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 15, 0)
++	.mode_valid_ctx = mst_connector_mode_valid_ctx_legacy,
++#else
+ 	.mode_valid_ctx = mst_connector_mode_valid_ctx,
++#endif
+ 	.atomic_best_encoder = mst_connector_atomic_best_encoder,
+ 	.atomic_check = mst_connector_atomic_check,
+ 	.detect_ctx = mst_connector_detect_ctx,
+@@ -1737,8 +1759,14 @@
+ 	connector->mst.port = port;
+ 	drm_dp_mst_get_port_malloc(port);
+ 
++	/* drm_connector_dynamic_init() landed in v6.14. */
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 14, 0)
++	ret = drm_connector_init(display->drm, &connector->base, &mst_connector_funcs,
++				 DRM_MODE_CONNECTOR_DisplayPort);
++#else
+ 	ret = drm_connector_dynamic_init(display->drm, &connector->base, &mst_connector_funcs,
+-					 DRM_MODE_CONNECTOR_DisplayPort, NULL);
++				 DRM_MODE_CONNECTOR_DisplayPort, NULL);
++#endif
+ 	if (ret)
+ 		goto err_put_port;
+ 
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/display/intel_dvo.c drivers/gpu/drm/i915/display/intel_dvo.c
+--- a/drivers/gpu/drm/i915/display/intel_dvo.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/display/intel_dvo.c	2026-03-11 17:48:01.501970720 +0800
+@@ -367,8 +367,22 @@
+ 	.atomic_duplicate_state = drm_atomic_helper_connector_duplicate_state,
+ };
+ 
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 15, 0)
++static enum drm_mode_status
++intel_dvo_mode_valid_legacy(struct drm_connector *connector,
++			   struct drm_display_mode *mode)
++{
++	return intel_dvo_mode_valid(connector, mode);
++}
++#endif
++
+ static const struct drm_connector_helper_funcs intel_dvo_connector_helper_funcs = {
++	/* mode_valid started taking a const drm_display_mode pointer in v6.15. */
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 15, 0)
++	.mode_valid = intel_dvo_mode_valid_legacy,
++#else
+ 	.mode_valid = intel_dvo_mode_valid,
++#endif
+ 	.get_modes = intel_dvo_get_modes,
+ };
+ 
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/display/intel_fb.c drivers/gpu/drm/i915/display/intel_fb.c
+--- a/drivers/gpu/drm/i915/display/intel_fb.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/display/intel_fb.c	2026-03-11 17:00:26.878038301 +0800
+@@ -422,6 +422,26 @@
+ 	}
+ }
+ 
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 17, 0)
++/**
++ * intel_fb_get_format_info: Get a modifier specific format information
++ * @cmd: FB add command structure
++ *
++ * Returns:
++ * Returns the format information for @cmd->pixel_format specific to @cmd->modifier[0],
++ * or %NULL if the modifier doesn't override the format.
++ */
++const struct drm_format_info *
++intel_fb_get_format_info(const struct drm_mode_fb_cmd2 *cmd)
++{
++	const struct intel_modifier_desc *md = lookup_modifier_or_null(cmd->modifier[0]);
++
++	if (!md || !md->formats)
++		return NULL;
++
++	return lookup_format_info(md->formats, md->format_count, cmd->pixel_format);
++}
++#else
+ /**
+  * intel_fb_get_format_info: Get a modifier specific format information
+  * @pixel_format: pixel format
+@@ -441,6 +461,7 @@
+ 
+ 	return lookup_format_info(md->formats, md->format_count, pixel_format);
+ }
++#endif
+ 
+ static bool plane_caps_contain_any(u8 caps, u8 mask)
+ {
+@@ -2266,7 +2287,12 @@
+ 		goto err_bo_framebuffer_fini;
+ 	}
+ 
++
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 17, 0)
++	drm_helper_mode_fill_fb_struct(display->drm, fb, mode_cmd);
++#else
+ 	drm_helper_mode_fill_fb_struct(display->drm, fb, info, mode_cmd);
++#endif
+ 
+ 	for (i = 0; i < fb->format->num_planes; i++) {
+ 		unsigned int stride_alignment;
+@@ -2339,8 +2365,13 @@
+ struct drm_framebuffer *
+ intel_user_framebuffer_create(struct drm_device *dev,
+ 			      struct drm_file *filp,
++			      
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 17, 0)
++			      const struct drm_mode_fb_cmd2 *user_mode_cmd)
++#else
+ 			      const struct drm_format_info *info,
+ 			      const struct drm_mode_fb_cmd2 *user_mode_cmd)
++#endif
+ {
+ 	struct drm_framebuffer *fb;
+ 	struct drm_gem_object *obj;
+@@ -2350,7 +2381,13 @@
+ 	if (IS_ERR(obj))
+ 		return ERR_CAST(obj);
+ 
++	#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 17, 0)
++	fb = intel_framebuffer_create(obj,
++			      drm_get_format_info(dev, &mode_cmd),
++			      &mode_cmd);
++	#else
+ 	fb = intel_framebuffer_create(obj, info, &mode_cmd);
++	#endif
+ 	drm_gem_object_put(obj);
+ 
+ 	return fb;
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/display/intel_fbdev.c drivers/gpu/drm/i915/display/intel_fbdev.c
+--- a/drivers/gpu/drm/i915/display/intel_fbdev.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/display/intel_fbdev.c	2026-03-11 17:14:49.958017868 +0800
+@@ -178,6 +178,7 @@
+ 	return 0;
+ }
+ 
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
+ static void intelfb_restore(struct drm_fb_helper *fb_helper)
+ {
+ 	struct intel_fbdev *ifbdev = to_intel_fbdev(fb_helper);
+@@ -206,6 +207,14 @@
+ 	.fb_restore = intelfb_restore,
+ 	.fb_set_suspend = intelfb_set_suspend,
+ };
++#endif
++
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 15, 0)
++static const struct drm_fb_helper_funcs intel_fb_helper_funcs = {
++	.fb_probe = intel_fbdev_driver_fbdev_probe,
++	.fb_dirty = intelfb_dirty,
++};
++#endif
+ 
+ static void intel_fbdev_fill_mode_cmd(struct drm_fb_helper_surface_size *sizes,
+ 				      struct drm_mode_fb_cmd2 *mode_cmd)
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/display/intel_fbdev_fb.c drivers/gpu/drm/i915/display/intel_fbdev_fb.c
+--- a/drivers/gpu/drm/i915/display/intel_fbdev_fb.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/display/intel_fbdev_fb.c	2026-03-11 17:16:32.618015438 +0800
+@@ -49,11 +49,21 @@
+ 		return ERR_PTR(-ENOMEM);
+ 	}
+ 
+-	fb = intel_framebuffer_create(intel_bo_to_drm_bo(obj),
+-				      drm_get_format_info(drm,
+-							  mode_cmd->pixel_format,
+-							  mode_cmd->modifier[0]),
+-				      mode_cmd);
++	{
++		const struct drm_format_info *format_info;
++
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
++		format_info = drm_get_format_info(drm, mode_cmd);
++#else
++		format_info = drm_get_format_info(drm,
++					  mode_cmd->pixel_format,
++					  mode_cmd->modifier[0]);
++#endif
++
++		fb = intel_framebuffer_create(intel_bo_to_drm_bo(obj),
++					      format_info,
++					      mode_cmd);
++	}
+ 	if (IS_ERR(fb)) {
+ 		i915_gem_object_put(obj);
+ 		goto err;
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/display/intel_fb.h drivers/gpu/drm/i915/display/intel_fb.h
+--- a/drivers/gpu/drm/i915/display/intel_fb.h	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/display/intel_fb.h	2026-03-11 16:59:51.250039144 +0800
+@@ -46,8 +46,13 @@
+ 				  u8 plane_caps);
+ bool intel_fb_plane_supports_modifier(struct intel_plane *plane, u64 modifier);
+ 
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 17, 0)
++const struct drm_format_info *
++intel_fb_get_format_info(const struct drm_mode_fb_cmd2 *cmd);
++#else
+ const struct drm_format_info *
+ intel_fb_get_format_info(u32 pixel_format, u64 modifier);
++#endif
+ 
+ bool
+ intel_format_info_is_yuv_semiplanar(const struct drm_format_info *info,
+@@ -114,8 +119,13 @@
+ struct drm_framebuffer *
+ intel_user_framebuffer_create(struct drm_device *dev,
+ 			      struct drm_file *filp,
++			      
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 17, 0)
++			      const struct drm_mode_fb_cmd2 *user_mode_cmd);
++#else
+ 			      const struct drm_format_info *info,
+ 			      const struct drm_mode_fb_cmd2 *user_mode_cmd);
++#endif
+ 
+ bool intel_fb_modifier_uses_dpt(struct intel_display *display, u64 modifier);
+ bool intel_fb_uses_dpt(const struct drm_framebuffer *fb);
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/display/intel_hdmi.c drivers/gpu/drm/i915/display/intel_hdmi.c
+--- a/drivers/gpu/drm/i915/display/intel_hdmi.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/display/intel_hdmi.c	2026-03-11 17:52:12.485964778 +0800
+@@ -2654,9 +2654,23 @@
+ 		return g4x_hdmi_connector_atomic_check(&connector->base, state);
+ }
+ 
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 15, 0)
++static enum drm_mode_status
++intel_hdmi_mode_valid_legacy(struct drm_connector *connector,
++			    struct drm_display_mode *mode)
++{
++	return intel_hdmi_mode_valid(connector, mode);
++}
++#endif
++
+ static const struct drm_connector_helper_funcs intel_hdmi_connector_helper_funcs = {
+ 	.get_modes = intel_hdmi_get_modes,
++	/* mode_valid started taking a const drm_display_mode pointer in v6.15. */
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 15, 0)
++	.mode_valid = intel_hdmi_mode_valid_legacy,
++#else
+ 	.mode_valid = intel_hdmi_mode_valid,
++#endif
+ 	.atomic_check = intel_hdmi_connector_atomic_check,
+ };
+ 
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/display/intel_lspcon.c drivers/gpu/drm/i915/display/intel_lspcon.c
+--- a/drivers/gpu/drm/i915/display/intel_lspcon.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/display/intel_lspcon.c	2026-03-11 17:52:42.109964076 +0800
+@@ -228,8 +228,13 @@
+ 		return 0;
+ 	}
+ 
++	/* drm_lspcon_set_mode() gained a settle-timeout parameter in v6.15. */
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 15, 0)
++	err = drm_lspcon_set_mode(intel_dp->aux.drm_dev, ddc, mode);
++#else
+ 	err = drm_lspcon_set_mode(intel_dp->aux.drm_dev, ddc, mode,
+-				  lspcon_get_mode_settle_timeout(lspcon));
++			  lspcon_get_mode_settle_timeout(lspcon));
++#endif
+ 	if (err < 0) {
+ 		drm_err(display->drm, "LSPCON mode change failed\n");
+ 		return err;
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/display/intel_lvds.c drivers/gpu/drm/i915/display/intel_lvds.c
+--- a/drivers/gpu/drm/i915/display/intel_lvds.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/display/intel_lvds.c	2026-03-11 17:53:09.477963429 +0800
+@@ -498,9 +498,23 @@
+ 	return intel_panel_get_modes(connector);
+ }
+ 
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 15, 0)
++static enum drm_mode_status
++intel_lvds_mode_valid_legacy(struct drm_connector *connector,
++			   struct drm_display_mode *mode)
++{
++	return intel_lvds_mode_valid(connector, mode);
++}
++#endif
++
+ static const struct drm_connector_helper_funcs intel_lvds_connector_helper_funcs = {
+ 	.get_modes = intel_lvds_get_modes,
++	/* mode_valid started taking a const drm_display_mode pointer in v6.15. */
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 15, 0)
++	.mode_valid = intel_lvds_mode_valid_legacy,
++#else
+ 	.mode_valid = intel_lvds_mode_valid,
++#endif
+ 	.atomic_check = intel_digital_connector_atomic_check,
+ };
+ 
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/display/intel_panel.c drivers/gpu/drm/i915/display/intel_panel.c
+--- a/drivers/gpu/drm/i915/display/intel_panel.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/display/intel_panel.c	2026-03-11 17:53:40.465962695 +0800
+@@ -538,13 +538,24 @@
+ 		 * missing, it will gracefully lead to -EPROBE_DEFER in
+ 		 * drm_panel_add_follower().
+ 		 */
++		/* __devm_drm_panel_alloc() is newer; older kernels use drm_panel_init(). */
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
++		base = devm_kzalloc(dev, sizeof(*base), GFP_KERNEL);
++		if (!base) {
++			ret = -ENOMEM;
++			goto err;
++		}
++		drm_panel_init(base, dev, &dummy_panel_funcs,
++			      connector->base.connector_type);
++#else
+ 		base = __devm_drm_panel_alloc(dev, sizeof(*base), 0,
+-					      &dummy_panel_funcs,
+-					      connector->base.connector_type);
++				      &dummy_panel_funcs,
++				      connector->base.connector_type);
+ 		if (IS_ERR(base)) {
+ 			ret = PTR_ERR(base);
+ 			goto err;
+ 		}
++#endif
+ 
+ 		panel->base = base;
+ 
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/display/intel_panic.c drivers/gpu/drm/i915/display/intel_panic.c
+--- a/drivers/gpu/drm/i915/display/intel_panic.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/display/intel_panic.c	2026-03-11 18:06:18.177944757 +0800
+@@ -1,6 +1,10 @@
+ // SPDX-License-Identifier: MIT
+ /* Copyright © 2025 Intel Corporation */
+ 
++#include <linux/version.h>
++
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 17, 0)
++
+ #include <drm/drm_panic.h>
+ 
+ #include "gem/i915_gem_object.h"
+@@ -25,3 +29,29 @@
+ {
+ 	return i915_gem_object_panic_finish(panic);
+ }
++
++#else
++
++#include <linux/errno.h>
++
++#include "intel_panic.h"
++
++struct intel_panic *intel_panic_alloc(void)
++{
++	return NULL;
++}
++
++int intel_panic_setup(struct intel_panic *panic, struct drm_scanout_buffer *sb)
++{
++	(void)panic;
++	(void)sb;
++
++	return -EOPNOTSUPP;
++}
++
++void intel_panic_finish(struct intel_panic *panic)
++{
++	(void)panic;
++}
++
++#endif
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/display/intel_plane.c drivers/gpu/drm/i915/display/intel_plane.c
+--- a/drivers/gpu/drm/i915/display/intel_plane.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/display/intel_plane.c	2026-03-11 17:02:15.106035739 +0800
+@@ -1376,6 +1376,7 @@
+ 	}
+ }
+ 
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 17, 0)
+ static int intel_get_scanout_buffer(struct drm_plane *plane,
+ 				    struct drm_scanout_buffer *sb)
+ {
+@@ -1423,19 +1424,28 @@
+ 
+ 	return 0;
+ }
++#endif
+ 
+ static const struct drm_plane_helper_funcs intel_plane_helper_funcs = {
+ 	.prepare_fb = intel_prepare_plane_fb,
+ 	.cleanup_fb = intel_cleanup_plane_fb,
+ };
+ 
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 17, 0)
+ static const struct drm_plane_helper_funcs intel_primary_plane_helper_funcs = {
+ 	.prepare_fb = intel_prepare_plane_fb,
+ 	.cleanup_fb = intel_cleanup_plane_fb,
+ 	.get_scanout_buffer = intel_get_scanout_buffer,
+ 	.panic_flush = intel_panic_flush,
+ };
++#endif
+ 
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 17, 0)
++void intel_plane_helper_add(struct intel_plane *plane)
++{
++	drm_plane_helper_add(&plane->base, &intel_plane_helper_funcs);
++}
++#else
+ void intel_plane_helper_add(struct intel_plane *plane)
+ {
+ 	if (plane->base.type == DRM_PLANE_TYPE_PRIMARY)
+@@ -1443,6 +1453,7 @@
+ 	else
+ 		drm_plane_helper_add(&plane->base, &intel_plane_helper_funcs);
+ }
++#endif
+ 
+ void intel_plane_init_cursor_vblank_work(struct intel_plane_state *old_plane_state,
+ 					 struct intel_plane_state *new_plane_state)
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/display/intel_sdvo.c drivers/gpu/drm/i915/display/intel_sdvo.c
+--- a/drivers/gpu/drm/i915/display/intel_sdvo.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/display/intel_sdvo.c	2026-03-11 17:54:05.621962099 +0800
+@@ -2536,9 +2536,23 @@
+ 	return intel_digital_connector_atomic_check(conn, state);
+ }
+ 
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 15, 0)
++static enum drm_mode_status
++intel_sdvo_mode_valid_legacy(struct drm_connector *connector,
++			   struct drm_display_mode *mode)
++{
++	return intel_sdvo_mode_valid(connector, mode);
++}
++#endif
++
+ static const struct drm_connector_helper_funcs intel_sdvo_connector_helper_funcs = {
+ 	.get_modes = intel_sdvo_get_modes,
++	/* mode_valid started taking a const drm_display_mode pointer in v6.15. */
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 15, 0)
++	.mode_valid = intel_sdvo_mode_valid_legacy,
++#else
+ 	.mode_valid = intel_sdvo_mode_valid,
++#endif
+ 	.atomic_check = intel_sdvo_atomic_check,
+ };
+ 
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/display/intel_tv.c drivers/gpu/drm/i915/display/intel_tv.c
+--- a/drivers/gpu/drm/i915/display/intel_tv.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/display/intel_tv.c	2026-03-11 17:54:27.109961591 +0800
+@@ -1873,9 +1873,23 @@
+ 	return 0;
+ }
+ 
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 15, 0)
++static enum drm_mode_status
++intel_tv_mode_valid_legacy(struct drm_connector *connector,
++			 struct drm_display_mode *mode)
++{
++	return intel_tv_mode_valid(connector, mode);
++}
++#endif
++
+ static const struct drm_connector_helper_funcs intel_tv_connector_helper_funcs = {
+ 	.detect_ctx = intel_tv_detect,
++	/* mode_valid started taking a const drm_display_mode pointer in v6.15. */
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 15, 0)
++	.mode_valid = intel_tv_mode_valid_legacy,
++#else
+ 	.mode_valid = intel_tv_mode_valid,
++#endif
+ 	.get_modes = intel_tv_get_modes,
+ 	.atomic_check = intel_tv_atomic_check,
+ };
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/display/skl_universal_plane.c drivers/gpu/drm/i915/display/skl_universal_plane.c
+--- a/drivers/gpu/drm/i915/display/skl_universal_plane.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/display/skl_universal_plane.c	2026-03-11 17:09:21.590025642 +0800
+@@ -2657,7 +2657,10 @@
+ 	.atomic_duplicate_state = intel_plane_duplicate_state,
+ 	.atomic_destroy_state = intel_plane_destroy_state,
+ 	.format_mod_supported = skl_plane_format_mod_supported,
++
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0)
+ 	.format_mod_supported_async = intel_plane_format_mod_supported_async,
++#endif
+ };
+ 
+ static const struct drm_plane_funcs icl_plane_funcs = {
+@@ -2667,7 +2670,10 @@
+ 	.atomic_duplicate_state = intel_plane_duplicate_state,
+ 	.atomic_destroy_state = intel_plane_destroy_state,
+ 	.format_mod_supported = icl_plane_format_mod_supported,
++
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0)
+ 	.format_mod_supported_async = intel_plane_format_mod_supported_async,
++#endif
+ };
+ 
+ static const struct drm_plane_funcs tgl_plane_funcs = {
+@@ -2677,7 +2683,10 @@
+ 	.atomic_duplicate_state = intel_plane_duplicate_state,
+ 	.atomic_destroy_state = intel_plane_destroy_state,
+ 	.format_mod_supported = tgl_plane_format_mod_supported,
++
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0)
+ 	.format_mod_supported_async = intel_plane_format_mod_supported_async,
++#endif
+ };
+ 
+ static void
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/display/vlv_dsi.c drivers/gpu/drm/i915/display/vlv_dsi.c
+--- a/drivers/gpu/drm/i915/display/vlv_dsi.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/display/vlv_dsi.c	2026-03-11 17:54:52.589960987 +0800
+@@ -1551,9 +1551,22 @@
+ 	return intel_dsi_mode_valid(connector, mode);
+ }
+ 
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 15, 0)
++static enum drm_mode_status vlv_dsi_mode_valid_legacy(struct drm_connector *connector,
++					      struct drm_display_mode *mode)
++{
++	return vlv_dsi_mode_valid(connector, mode);
++}
++#endif
++
+ static const struct drm_connector_helper_funcs intel_dsi_connector_helper_funcs = {
+ 	.get_modes = intel_dsi_get_modes,
++	/* mode_valid started taking a const drm_display_mode pointer in v6.15. */
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 15, 0)
++	.mode_valid = vlv_dsi_mode_valid_legacy,
++#else
+ 	.mode_valid = vlv_dsi_mode_valid,
++#endif
+ 	.atomic_check = intel_digital_connector_atomic_check,
+ };
+ 
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/gem/i915_gem_dmabuf.c drivers/gpu/drm/i915/gem/i915_gem_dmabuf.c
+--- a/drivers/gpu/drm/i915/gem/i915_gem_dmabuf.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/gem/i915_gem_dmabuf.c	2026-03-11 18:06:18.177944757 +0800
+@@ -15,7 +15,7 @@
+ #include "i915_gem_object.h"
+ #include "i915_scatterlist.h"
+ 
+-MODULE_IMPORT_NS("DMA_BUF");
++MODULE_IMPORT_NS(DMA_BUF);
+ 
+ I915_SELFTEST_DECLARE(static bool force_different_devices;)
+ 
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/gem/i915_gemfs.c drivers/gpu/drm/i915/gem/i915_gemfs.c
+--- a/drivers/gpu/drm/i915/gem/i915_gemfs.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/gem/i915_gemfs.c	2026-03-11 16:51:41.466050739 +0800
+@@ -13,10 +13,19 @@
+ 
+ void i915_gemfs_init(struct drm_i915_private *i915)
+ {
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 17, 0)
++	char huge_opt[] = "huge=within_size"; /* r/w */
++#endif
+ 	struct file_system_type *type;
++
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 17, 0)
+ 	struct fs_context *fc;
++#endif
+ 	struct vfsmount *gemfs;
++
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 17, 0)
+ 	int ret;
++#endif
+ 
+ 	/*
+ 	 * By creating our own shmemfs mountpoint, we can pass in
+@@ -40,17 +49,32 @@
+ 	if (!type)
+ 		goto err;
+ 
++
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 17, 0)
++	gemfs = vfs_kern_mount(type, SB_KERNMOUNT, type->name, huge_opt);
++	if (IS_ERR(gemfs))
++		goto err;
++#else
+ 	fc = fs_context_for_mount(type, SB_KERNMOUNT);
+ 	if (IS_ERR(fc))
+ 		goto err;
++	#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
++	ret = vfs_parse_fs_string(fc, "source", "tmpfs", 5);
++	#else
+ 	ret = vfs_parse_fs_string(fc, "source", "tmpfs");
++	#endif
+ 	if (!ret)
++		#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
++		ret = vfs_parse_fs_string(fc, "huge", "within_size", 11);
++		#else
+ 		ret = vfs_parse_fs_string(fc, "huge", "within_size");
++		#endif
+ 	if (!ret)
+ 		gemfs = fc_mount_longterm(fc);
+ 	put_fs_context(fc);
+ 	if (ret)
+ 		goto err;
++#endif
+ 
+ 	i915->mm.gemfs = gemfs;
+ 	drm_info(&i915->drm, "Using Transparent Hugepages\n");
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/gem/i915_gem_pages.c drivers/gpu/drm/i915/gem/i915_gem_pages.c
+--- a/drivers/gpu/drm/i915/gem/i915_gem_pages.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/gem/i915_gem_pages.c	2026-03-11 16:45:19.602059780 +0800
+@@ -363,6 +363,7 @@
+ 	void *vaddr;
+ };
+ 
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 17, 0)
+ static void i915_panic_kunmap(struct intel_panic *panic)
+ {
+ 	if (panic->vaddr) {
+@@ -431,6 +432,8 @@
+ 	}
+ }
+ 
++#endif
++
+ struct intel_panic *i915_gem_object_alloc_panic(void)
+ {
+ 	struct intel_panic *panic;
+@@ -445,6 +448,8 @@
+  * Use current vaddr if it exists, or setup a list of pages.
+  * pfn is not supported yet.
+  */
++
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 17, 0)
+ int i915_gem_object_panic_setup(struct intel_panic *panic, struct drm_scanout_buffer *sb,
+ 				struct drm_gem_object *_obj, bool panic_tiling)
+ {
+@@ -482,6 +487,8 @@
+ 	panic->pages = NULL;
+ }
+ 
++#endif
++
+ /* get, pin, and map the pages of the object into kernel space */
+ void *i915_gem_object_pin_map(struct drm_i915_gem_object *obj,
+ 			      enum i915_map_type type)
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/gem/i915_gem_shmem.c drivers/gpu/drm/i915/gem/i915_gem_shmem.c
+--- a/drivers/gpu/drm/i915/gem/i915_gem_shmem.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/gem/i915_gem_shmem.c	2026-03-11 16:50:59.130051742 +0800
+@@ -296,6 +296,49 @@
+ 	return 0;
+ }
+ 
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 16, 0)
++void __shmem_writeback(size_t size, struct address_space *mapping)
++{
++	struct writeback_control wbc = {
++		.sync_mode = WB_SYNC_NONE,
++		.nr_to_write = SWAP_CLUSTER_MAX,
++		.range_start = 0,
++		.range_end = LLONG_MAX,
++		.for_reclaim = 1,
++	};
++	unsigned long i;
++
++	/*
++	 * Leave mmapings intact (GTT will have been revoked on unbinding,
++	 * leaving only CPU mmapings around) and add those pages to the LRU
++	 * instead of invoking writeback so they are aged and paged out
++	 * as normal.
++	 */
++
++	/* Begin writeback on each dirty page */
++	for (i = 0; i < size >> PAGE_SHIFT; i++) {
++		struct page *page;
++
++		page = find_lock_page(mapping, i);
++		if (!page)
++			continue;
++
++		if (!page_mapped(page) && clear_page_dirty_for_io(page)) {
++			int ret;
++
++			SetPageReclaim(page);
++			ret = mapping->a_ops->writepage(page, &wbc);
++			if (!PageWriteback(page))
++				ClearPageReclaim(page);
++			if (!ret)
++				goto put;
++		}
++		unlock_page(page);
++put:
++		put_page(page);
++	}
++}
++#else
+ void __shmem_writeback(size_t size, struct address_space *mapping)
+ {
+ 	struct writeback_control wbc = {
+@@ -317,9 +360,14 @@
+ 		if (folio_mapped(folio))
+ 			folio_redirty_for_writepage(&wbc, folio);
+ 		else
++		#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 17, 0)
++			error = shmem_writeout(folio, &wbc);
++		#else
+ 			error = shmem_writeout(folio, NULL, NULL);
++		#endif
+ 	}
+ }
++#endif
+ 
+ static void
+ shmem_writeback(struct drm_i915_gem_object *obj)
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/gem/i915_gem_ttm.c drivers/gpu/drm/i915/gem/i915_gem_ttm.c
+--- a/drivers/gpu/drm/i915/gem/i915_gem_ttm.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/gem/i915_gem_ttm.c	2026-03-11 16:50:59.130051742 +0800
+@@ -808,7 +808,11 @@
+ 	}
+ 
+ 	if (bo->ttm && !ttm_tt_is_populated(bo->ttm)) {
++	#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 13, 0)
++		ret = ttm_tt_populate(bo->bdev, bo->ttm, &ctx);
++	#else
+ 		ret = ttm_bo_populate(bo, &ctx);
++	#endif
+ 		if (ret)
+ 			return ret;
+ 
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/gem/i915_gem_ttm_move.c drivers/gpu/drm/i915/gem/i915_gem_ttm_move.c
+--- a/drivers/gpu/drm/i915/gem/i915_gem_ttm_move.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/gem/i915_gem_ttm_move.c	2026-03-11 16:50:59.130051742 +0800
+@@ -624,7 +624,11 @@
+ 
+ 	/* Populate ttm with pages if needed. Typically system memory. */
+ 	if (ttm && (dst_man->use_tt || (ttm->page_flags & TTM_TT_FLAG_SWAPPED))) {
++	#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 13, 0)
++		ret = ttm_tt_populate(bo->bdev, ttm, ctx);
++	#else
+ 		ret = ttm_bo_populate(bo, ctx);
++	#endif
+ 		if (ret)
+ 			return ret;
+ 	}
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/gem/i915_gem_ttm_pm.c drivers/gpu/drm/i915/gem/i915_gem_ttm_pm.c
+--- a/drivers/gpu/drm/i915/gem/i915_gem_ttm_pm.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/gem/i915_gem_ttm_pm.c	2026-03-11 16:50:59.134051742 +0800
+@@ -90,7 +90,11 @@
+ 		goto out_no_lock;
+ 
+ 	backup_bo = i915_gem_to_ttm(backup);
++	#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 13, 0)
++	err = ttm_tt_populate(backup_bo->bdev, backup_bo->ttm, &ctx);
++	#else
+ 	err = ttm_bo_populate(backup_bo, &ctx);
++	#endif
+ 	if (err)
+ 		goto out_no_populate;
+ 
+@@ -189,7 +193,11 @@
+ 	if (!backup_bo->resource)
+ 		err = ttm_bo_validate(backup_bo, i915_ttm_sys_placement(), &ctx);
+ 	if (!err)
++	#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 13, 0)
++		err = ttm_tt_populate(backup_bo->bdev, backup_bo->ttm, &ctx);
++	#else
+ 		err = ttm_bo_populate(backup_bo, &ctx);
++	#endif
+ 	if (!err) {
+ 		err = i915_gem_obj_copy_ttm(obj, backup, pm_apply->allow_gpu,
+ 					    false);
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/gt/intel_ggtt_gmch.c drivers/gpu/drm/i915/gt/intel_ggtt_gmch.c
+--- a/drivers/gpu/drm/i915/gt/intel_ggtt_gmch.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/gt/intel_ggtt_gmch.c	2026-03-11 16:42:07.090064337 +0800
+@@ -8,6 +8,7 @@
+ #include <drm/intel/intel-gtt.h>
+ 
+ #include <linux/agp_backend.h>
++#include <linux/version.h>
+ 
+ #include "i915_drv.h"
+ #include "i915_utils.h"
+@@ -27,12 +28,14 @@
+ 	intel_gmch_gtt_insert_page(addr, offset >> PAGE_SHIFT, flags);
+ }
+ 
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0)
+ static dma_addr_t gmch_ggtt_read_entry(struct i915_address_space *vm,
+-				       u64 offset, bool *is_present, bool *is_local)
++			       u64 offset, bool *is_present, bool *is_local)
+ {
+ 	return intel_gmch_gtt_read_entry(offset >> PAGE_SHIFT,
+-					 is_present, is_local);
++				 is_present, is_local);
+ }
++#endif
+ 
+ static void gmch_ggtt_insert_entries(struct i915_address_space *vm,
+ 				     struct i915_vma_resource *vma_res,
+@@ -110,7 +113,10 @@
+ 	ggtt->vm.insert_entries = gmch_ggtt_insert_entries;
+ 	ggtt->vm.clear_range = gmch_ggtt_clear_range;
+ 	ggtt->vm.scratch_range = gmch_ggtt_clear_range;
++
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0)
+ 	ggtt->vm.read_entry = gmch_ggtt_read_entry;
++#endif
+ 	ggtt->vm.cleanup = gmch_ggtt_remove;
+ 
+ 	ggtt->invalidate = gmch_ggtt_invalidate;
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/gt/uc/intel_guc_log.c drivers/gpu/drm/i915/gt/uc/intel_guc_log.c
+--- a/drivers/gpu/drm/i915/gt/uc/intel_guc_log.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/gt/uc/intel_guc_log.c	2026-03-11 16:52:22.662049764 +0800
+@@ -220,9 +220,16 @@
+  * Sub buffer switch callback. Called whenever relay has to switch to a new
+  * sub buffer, relay stays on the same sub buffer if 0 is returned.
+  */
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 17, 0)
+ static int subbuf_start_callback(struct rchan_buf *buf,
+-				 void *subbuf,
+-				 void *prev_subbuf)
++			 void *subbuf,
++			 void *prev_subbuf,
++			 size_t prev_padding)
++#else
++static int subbuf_start_callback(struct rchan_buf *buf,
++			 void *subbuf,
++			 void *prev_subbuf)
++#endif
+ {
+ 	/*
+ 	 * Use no-overwrite mode by default, where relay will stop accepting
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/gvt/kvmgt.c drivers/gpu/drm/i915/gvt/kvmgt.c
+--- a/drivers/gpu/drm/i915/gvt/kvmgt.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/gvt/kvmgt.c	2026-03-12 09:32:36.324628986 +0800
+@@ -53,8 +53,8 @@
+ #include "intel_gvt.h"
+ #include "gvt.h"
+ 
+-MODULE_IMPORT_NS("DMA_BUF");
+-MODULE_IMPORT_NS("I915_GVT");
++MODULE_IMPORT_NS(DMA_BUF);
++MODULE_IMPORT_NS(I915_GVT);
+ 
+ /* helper macros copied from vfio-pci */
+ #define VFIO_PCI_OFFSET_SHIFT   40
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/i915_gpu_error.c drivers/gpu/drm/i915/i915_gpu_error.c
+--- a/drivers/gpu/drm/i915/i915_gpu_error.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/i915_gpu_error.c	2026-03-11 17:59:24.937954540 +0800
+@@ -2604,12 +2604,36 @@
+ 	return count;
+ }
+ 
++/* sysfs bin_attribute callbacks gained const struct bin_attribute in v6.18. */
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
++static ssize_t error_state_read_legacy(struct file *filp, struct kobject *kobj,
++			       struct bin_attribute *attr, char *buf,
++			       loff_t off, size_t count)
++{
++	return error_state_read(filp, kobj, (const struct bin_attribute *)attr,
++				buf, off, count);
++}
++
++static ssize_t error_state_write_legacy(struct file *file, struct kobject *kobj,
++				struct bin_attribute *attr, char *buf,
++				loff_t off, size_t count)
++{
++	return error_state_write(file, kobj, (const struct bin_attribute *)attr,
++				 buf, off, count);
++}
++#endif
++
+ static const struct bin_attribute error_state_attr = {
+ 	.attr.name = "error",
+ 	.attr.mode = S_IRUSR | S_IWUSR,
+ 	.size = 0,
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
++	.read = error_state_read_legacy,
++	.write = error_state_write_legacy,
++#else
+ 	.read = error_state_read,
+ 	.write = error_state_write,
++#endif
+ };
+ 
+ void i915_gpu_error_sysfs_setup(struct drm_i915_private *i915)
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/i915_sysfs.c drivers/gpu/drm/i915/i915_sysfs.c
+--- a/drivers/gpu/drm/i915/i915_sysfs.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/i915_sysfs.c	2026-03-12 10:35:00.000000000 +0800
+@@ -36,6 +36,12 @@
+ 
+ #include "i915_drv.h"
+ #include "i915_sysfs.h"
++
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
++#define I915_BIN_ATTR_CONST
++#else
++#define I915_BIN_ATTR_CONST const
++#endif
+ 
+ struct drm_i915_private *kdev_minor_to_i915(struct device *kdev)
+ {
+@@ -57,5 +63,5 @@
+ static ssize_t
+ i915_l3_read(struct file *filp, struct kobject *kobj,
+-	     const struct bin_attribute *attr, char *buf,
++	     I915_BIN_ATTR_CONST struct bin_attribute *attr, char *buf,
+ 	     loff_t offset, size_t count)
+ {
+@@ -92,5 +98,5 @@
+ static ssize_t
+ i915_l3_write(struct file *filp, struct kobject *kobj,
+-	      const struct bin_attribute *attr, char *buf,
++	      I915_BIN_ATTR_CONST struct bin_attribute *attr, char *buf,
+ 	      loff_t offset, size_t count)
+ {
+@@ -140,8 +146,8 @@
+ static const struct bin_attribute dpf_attrs = {
+ 	.attr = {.name = "l3_parity", .mode = (S_IRUSR | S_IWUSR)},
+ 	.size = GEN7_L3LOG_SIZE,
+-	.read = i915_l3_read,
+-	.write = i915_l3_write,
++	.read = (typeof(((struct bin_attribute *)0)->read))i915_l3_read,
++	.write = (typeof(((struct bin_attribute *)0)->write))i915_l3_write,
+ 	.mmap = NULL,
+ 	.private = (void *)0
+ };
+@@ -149,8 +149,8 @@
+ static const struct bin_attribute dpf_attrs_1 = {
+ 	.attr = {.name = "l3_parity_slice_1", .mode = (S_IRUSR | S_IWUSR)},
+ 	.size = GEN7_L3LOG_SIZE,
+-	.read = i915_l3_read,
+-	.write = i915_l3_write,
++	.read = (typeof(((struct bin_attribute *)0)->read))i915_l3_read,
++	.write = (typeof(((struct bin_attribute *)0)->write))i915_l3_write,
+ 	.mmap = NULL,
+ 	.private = (void *)1
+ };
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/intel_gvt.c drivers/gpu/drm/i915/intel_gvt.c
+--- a/drivers/gpu/drm/i915/intel_gvt.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/intel_gvt.c	2026-03-12 09:32:36.324628986 +0800
+@@ -204,7 +204,7 @@
+ 
+ 	return 0;
+ }
+-EXPORT_SYMBOL_NS_GPL(intel_gvt_set_ops, "I915_GVT");
++EXPORT_SYMBOL_NS_GPL(intel_gvt_set_ops, I915_GVT);
+ 
+ void intel_gvt_clear_ops(const struct intel_vgpu_ops *ops)
+ {
+@@ -222,7 +222,7 @@
+ 	intel_gvt_ops = NULL;
+ 	mutex_unlock(&intel_gvt_mutex);
+ }
+-EXPORT_SYMBOL_NS_GPL(intel_gvt_clear_ops, "I915_GVT");
++EXPORT_SYMBOL_NS_GPL(intel_gvt_clear_ops, I915_GVT);
+ 
+ /**
+  * intel_gvt_init - initialize GVT components
+@@ -284,40 +284,40 @@
+  * Exported here so that the exports only get created when GVT support is
+  * actually enabled.
+  */
+-EXPORT_SYMBOL_NS_GPL(i915_gem_object_alloc, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(i915_gem_object_create_shmem, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(i915_gem_object_init, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(i915_gem_object_ggtt_pin_ww, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(i915_gem_object_pin_map, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(i915_gem_object_set_to_cpu_domain, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(__i915_gem_object_flush_map, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(__i915_gem_object_set_pages, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(i915_gem_gtt_insert, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(i915_gem_prime_export, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(i915_gem_ww_ctx_init, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(i915_gem_ww_ctx_backoff, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(i915_gem_ww_ctx_fini, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(i915_ppgtt_create, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(i915_request_add, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(i915_request_create, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(i915_request_wait, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(i915_reserve_fence, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(i915_unreserve_fence, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(i915_vm_release, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(_i915_vma_move_to_active, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(intel_context_create, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(__intel_context_do_pin, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(__intel_context_do_unpin, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(intel_ring_begin, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(intel_runtime_pm_get, "I915_GVT");
++EXPORT_SYMBOL_NS_GPL(i915_gem_object_alloc, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(i915_gem_object_create_shmem, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(i915_gem_object_init, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(i915_gem_object_ggtt_pin_ww, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(i915_gem_object_pin_map, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(i915_gem_object_set_to_cpu_domain, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(__i915_gem_object_flush_map, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(__i915_gem_object_set_pages, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(i915_gem_gtt_insert, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(i915_gem_prime_export, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(i915_gem_ww_ctx_init, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(i915_gem_ww_ctx_backoff, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(i915_gem_ww_ctx_fini, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(i915_ppgtt_create, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(i915_request_add, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(i915_request_create, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(i915_request_wait, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(i915_reserve_fence, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(i915_unreserve_fence, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(i915_vm_release, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(_i915_vma_move_to_active, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(intel_context_create, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(__intel_context_do_pin, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(__intel_context_do_unpin, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(intel_ring_begin, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(intel_runtime_pm_get, I915_GVT);
+ #if IS_ENABLED(CONFIG_DRM_I915_DEBUG_RUNTIME_PM)
+-EXPORT_SYMBOL_NS_GPL(intel_runtime_pm_put, "I915_GVT");
++EXPORT_SYMBOL_NS_GPL(intel_runtime_pm_put, I915_GVT);
+ #endif
+-EXPORT_SYMBOL_NS_GPL(intel_runtime_pm_put_unchecked, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(intel_uncore_forcewake_for_reg, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(intel_uncore_forcewake_get, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(intel_uncore_forcewake_put, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(shmem_pin_map, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(shmem_unpin_map, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(__px_dma, "I915_GVT");
+-EXPORT_SYMBOL_NS_GPL(i915_fence_ops, "I915_GVT");
++EXPORT_SYMBOL_NS_GPL(intel_runtime_pm_put_unchecked, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(intel_uncore_forcewake_for_reg, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(intel_uncore_forcewake_get, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(intel_uncore_forcewake_put, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(shmem_pin_map, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(shmem_unpin_map, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(__px_dma, I915_GVT);
++EXPORT_SYMBOL_NS_GPL(i915_fence_ops, I915_GVT);
+diff -ruN .cache/linux-6.18.16/drivers/gpu/drm/i915/intel_gvt_mmio_table.c drivers/gpu/drm/i915/intel_gvt_mmio_table.c
+--- a/drivers/gpu/drm/i915/intel_gvt_mmio_table.c	2026-03-04 20:25:12.000000000 +0800
++++ b/drivers/gpu/drm/i915/intel_gvt_mmio_table.c	2026-03-12 09:32:36.324628986 +0800
+@@ -1317,4 +1317,4 @@
+ err:
+ 	return ret;
+ }
+-EXPORT_SYMBOL_NS_GPL(intel_gvt_iterate_mmio_table, "I915_GVT");
++EXPORT_SYMBOL_NS_GPL(intel_gvt_iterate_mmio_table, I915_GVT);
+--- a/drivers/gpu/drm/i915/Makefile	2026-03-04 20:25:12.000000000 +0800
+
