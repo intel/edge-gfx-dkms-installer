@@ -1,0 +1,19 @@
+#!/usr/bin/make -f
+
+PKG     := edge-gfx-dkms
+VERSION := $(shell sed -n 's/^PACKAGE_VERSION="\(.*\)"/\1/p' dkms.conf)
+DKMSDIR := debian/$(PKG)/usr/src/$(PKG)-$(VERSION)
+
+%:
+	dh $@ --with dkms
+
+# The top-level Makefile is the DKMS external-module wrapper, not a build
+# system for the source package itself. Skip auto-build and auto-clean.
+override_dh_auto_build:
+override_dh_auto_clean:
+
+# Install DKMS source tree into the staging directory.
+# dh_dkms installs dkms.conf itself; we install the rest of the git-tracked files.
+override_dh_auto_install:
+	install -d $(DKMSDIR)
+	git ls-files | grep -v '^debian/\|^dkms\.conf$$' | xargs cp --parents -t $(DKMSDIR)/

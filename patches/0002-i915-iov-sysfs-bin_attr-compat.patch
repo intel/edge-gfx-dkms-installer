@@ -1,0 +1,45 @@
+--- a/drivers/gpu/drm/i915/gt/iov/intel_iov_sysfs.c
++++ b/drivers/gpu/drm/i915/gt/iov/intel_iov_sysfs.c
+@@ -10,2 +10,10 @@
+ #include "intel_iov_utils.h"
+ 
++#include <linux/version.h>
++
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)
++#define IOV_BIN_ATTR_CONST const
++#else
++#define IOV_BIN_ATTR_CONST
++#endif
++
+@@ -487,7 +495,7 @@
+ }
+ 
+ static ssize_t bin_attr_state_read(struct file *filp, struct kobject *kobj,
+-			   const struct bin_attribute *bin_attr, char *buf,
++			   IOV_BIN_ATTR_CONST struct bin_attribute *bin_attr, char *buf,
+ 			   loff_t off, size_t count)
+ {
+ 	struct intel_iov *iov = kobj_to_iov(kobj);
+@@ -505,7 +513,7 @@
+ }
+ 
+ static ssize_t bin_attr_state_write(struct file *filp, struct kobject *kobj,
+-			    const struct bin_attribute *bin_attr, char *buf,
++			    IOV_BIN_ATTR_CONST struct bin_attribute *bin_attr, char *buf,
+ 			    loff_t off, size_t count)
+ {
+ 	struct intel_iov *iov = kobj_to_iov(kobj);
+@@ -524,8 +532,12 @@
+ 
+ static BIN_ATTR(state, 0600, bin_attr_state_read, bin_attr_state_write, SZ_4K);
+ 
+-static const struct bin_attribute * const vf_bin_attrs[] = {
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)
++static const struct bin_attribute * const vf_bin_attrs[] = {
++#else
++static struct bin_attribute *vf_bin_attrs[] = {
++#endif
+ 	&bin_attr_state,
+ 	NULL
+ };
+ 

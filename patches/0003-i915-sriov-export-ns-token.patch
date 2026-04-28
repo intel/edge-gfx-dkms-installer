@@ -1,0 +1,12 @@
+--- a/drivers/gpu/drm/i915/i915_sriov.c
++++ b/drivers/gpu/drm/i915/i915_sriov.c
+@@ -6,7 +6,7 @@
+ #include "i915_sriov_sysfs.h"
+ #include "i915_sriov_sysfs_types.h"
+ 
+ #ifndef I915_SRIOV_NS
+-#define I915_SRIOV_NS "i915_sriov"
++#define I915_SRIOV_NS i915_sriov
+ #endif
+ 
+ #define I915_SRIOV_FLAG_NOSIOV		BIT(0)

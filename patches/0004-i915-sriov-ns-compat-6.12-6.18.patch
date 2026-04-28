@@ -1,0 +1,30 @@
+diff --git a/include/drm/i915_sriov.h b/include/drm/i915_sriov.h
+index 111111111111..222222222222 100644
+--- a/include/drm/i915_sriov.h
++++ b/include/drm/i915_sriov.h
+@@ -7,14 +7,22 @@
+ 
+ #include <linux/pci.h>
+ #include <linux/types.h>
++#include <linux/version.h>
+ 
+ /*
+  * Namespace for i915 SR-IOV exported symbols.
+  *
+- * Note: EXPORT_SYMBOL_NS* expects the namespace argument to be a string
+- * literal (or a macro expanding to one).
++ * Note: This needs to be compatible with different kernel versions.
++ *
++ * Older kernels (e.g. 6.12) stringify the namespace argument internally.
++ * Newer kernels (e.g. 6.18) expect the namespace argument to already be
++ * a string.
+  */
+-#define I915_SRIOV_NS "I915_SRIOV"
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)
++#define I915_SRIOV_NS "I915_SRIOV"
++#else
++#define I915_SRIOV_NS I915_SRIOV
++#endif
+ 
+ int i915_sriov_pause_vf(struct pci_dev *pdev, unsigned int vfid);
+ int i915_sriov_resume_vf(struct pci_dev *pdev, unsigned int vfid);

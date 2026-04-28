@@ -1,0 +1,47 @@
+diff --git a/drivers/gpu/drm/i915/i915_trace.h b/drivers/gpu/drm/i915/i915_trace.h
+--- a/drivers/gpu/drm/i915/i915_trace.h
++++ b/drivers/gpu/drm/i915/i915_trace.h
+@@ -721,6 +721,6 @@
+ /* This part must be outside protection */
+ #undef TRACE_INCLUDE_PATH
+ #undef TRACE_INCLUDE_FILE
+-#define TRACE_INCLUDE_PATH ../../drivers/gpu/drm/i915
++#define TRACE_INCLUDE_PATH .
+ #define TRACE_INCLUDE_FILE i915_trace
+ #include <trace/define_trace.h>
+
+diff --git a/drivers/gpu/drm/i915/intel_uncore_trace.h b/drivers/gpu/drm/i915/intel_uncore_trace.h
+--- a/drivers/gpu/drm/i915/intel_uncore_trace.h
++++ b/drivers/gpu/drm/i915/intel_uncore_trace.h
+@@ -44,6 +44,6 @@
+ /* This part must be outside protection */
+ #undef TRACE_INCLUDE_PATH
+ #undef TRACE_INCLUDE_FILE
+-#define TRACE_INCLUDE_PATH ../../drivers/gpu/drm/i915
++#define TRACE_INCLUDE_PATH .
+ #define TRACE_INCLUDE_FILE intel_uncore_trace
+ #include <trace/define_trace.h>
+
+diff --git a/drivers/gpu/drm/i915/display/intel_display_trace.h b/drivers/gpu/drm/i915/display/intel_display_trace.h
+--- a/drivers/gpu/drm/i915/display/intel_display_trace.h
++++ b/drivers/gpu/drm/i915/display/intel_display_trace.h
+@@ -853,6 +853,6 @@
+ /* This part must be outside protection */
+ #undef TRACE_INCLUDE_PATH
+ #undef TRACE_INCLUDE_FILE
+-#define TRACE_INCLUDE_PATH ../../drivers/gpu/drm/i915/display
++#define TRACE_INCLUDE_PATH display
+ #define TRACE_INCLUDE_FILE intel_display_trace
+ #include <trace/define_trace.h>
+
+diff --git a/drivers/gpu/drm/i915/gvt/trace.h b/drivers/gpu/drm/i915/gvt/trace.h
+--- a/drivers/gpu/drm/i915/gvt/trace.h
++++ b/drivers/gpu/drm/i915/gvt/trace.h
+@@ -378,6 +378,6 @@
+ /* This part must be out of protection */
+ #undef TRACE_INCLUDE_PATH
+ #undef TRACE_INCLUDE_FILE
+-#define TRACE_INCLUDE_PATH ../../drivers/gpu/drm/i915/gvt
++#define TRACE_INCLUDE_PATH gvt
+ #define TRACE_INCLUDE_FILE trace
+ #include <trace/define_trace.h>

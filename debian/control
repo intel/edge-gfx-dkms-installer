@@ -1,0 +1,20 @@
+Source: edge-gfx-dkms
+Section: kernel
+Priority: optional
+Maintainer: Intel Graphics <linux-intel-graphics@intel.com>
+Build-Depends: debhelper-compat (= 13), dh-dkms
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+
+Package: edge-gfx-dkms
+Architecture: all
+Depends: dkms (>= 3.0), build-essential, curl, git, patch, xz-utils, zstd, ${misc:Depends}
+Description: SR-IOV i915 DKMS source package
+ DKMS source package for the Intel i915 GPU driver with SR-IOV support.
+ Builds i915 and kvmgt kernel modules from a vendored kernel.org LTS
+ i915 snapshot with a curated SR-IOV patch stack applied at build time.
+ .
+ SR-IOV patches are fetched from a configured quilt repository during
+ the DKMS pre-build hook. The quilt URL and branch are set in quilt.conf.
+ .
+ Supported kernel series: 6.18.x

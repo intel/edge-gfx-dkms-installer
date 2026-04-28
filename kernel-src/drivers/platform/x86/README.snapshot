@@ -1,0 +1,3 @@
+This directory is populated from the upstream kernel tree when syncing i915.
+
+At minimum, intel_ips.h may be needed for i915 builds.
