@@ -9,8 +9,13 @@ This package uses DKMS to build and install Intel graphics kernel modules (`i915
 The Edge Graphics DKMS installer is distributed under the [MIT license](docs/license.md)
 
 ## Supported Platforms
-* Intel(R) Arrowlake Desktop ARL-S
-* Intel(R) ArrowlakeH Mobile ARL-H
+* Intel® Alder Lake
+* Intel® Raptor Lake
+* Intel® Meteor Lake
+* Intel® Amston Lake
+* Intel® Twinlake
+* Intel® Bartlett Lake
+* Intel® Arrow Lake
 
 ## Supported Host Operating System
 * Ubuntu 24.04.4 LTS
